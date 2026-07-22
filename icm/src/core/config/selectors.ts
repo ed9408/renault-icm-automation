@@ -38,6 +38,7 @@ export const Selectors = {
       '#DivDet > table:nth-child(1) > tbody > tr > td.TitrePage',
     fields: {
       tipo_vh: "input[name=Vehicule_TYPE_APV]",
+      num_fab: "input[name=Vehicule_N_FAB]",
       tipo_mot: "input[name=Vehicule_TYP_MOT]",
       tipo_caja: "input[name=Vehicule_TYP_BOI]",
       fecha_entrega:
