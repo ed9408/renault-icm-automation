@@ -16,9 +16,9 @@ export class FetchHttpClient implements IHttpClient {
     options: HttpRequestOptions,
     body?: TBody,
   ): Promise<unknown> {
-    const { host, path, port = '443', method = 'POST', headers = {} } = options;
+    const { host, path, method = 'POST', headers = {} } = options;
 
-    const url = `https://${host}:${port}${path}`;
+    const url = `https://${host}${path}`;
     const finalHeaders: Record<string, string> = {
       'Content-Type': 'application/json',
       ...headers,
