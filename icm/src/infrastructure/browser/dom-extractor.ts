@@ -194,6 +194,7 @@ export class PuppeteerDomExtractor implements IDomExtractor {
       tipo_vh: raw['tipo_vh'] ?? DEFAULT_ADMIN_VALUES.tipo_vh,
       tipo_mot: raw['tipo_mot'] ?? DEFAULT_ADMIN_VALUES.tipo_mot,
       tipo_caja: raw['tipo_caja'] ?? DEFAULT_ADMIN_VALUES.tipo_caja,
+      num_fab: raw['num_fab'] ?? DEFAULT_ADMIN_VALUES.tipo_caja,
       fecha_entrega:
         raw['fecha_entrega'] ?? DEFAULT_ADMIN_VALUES.fecha_entrega,
     };

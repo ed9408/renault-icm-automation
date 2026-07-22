@@ -57,6 +57,7 @@ export interface AdminValues {
   tipo_vh: string;
   tipo_mot: string;
   tipo_caja: string;
+  num_fab: string;
   fecha_entrega: string;
 }
 
@@ -64,5 +65,6 @@ export const DEFAULT_ADMIN_VALUES: AdminValues = {
   tipo_vh: '-',
   tipo_mot: '-',
   tipo_caja: '-',
+  num_fab: '-',
   fecha_entrega: '-',
 };
