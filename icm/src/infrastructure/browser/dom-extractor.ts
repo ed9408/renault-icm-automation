@@ -1,7 +1,13 @@
 import type { Frame as PuppeteerFrame } from 'puppeteer';
 
+import { appConfig } from '../../core/config/app-config.ts';
+import {
+  SelectorTimeoutError,
+  type ErrorContext,
+} from '../../core/errors/domain-errors.ts';
+import { writeHtmlDumpToDisk } from '../../core/utils/error-html-dumper.ts';
 import { delay } from '../../core/utils/delay.ts';
-import { SelectorTimeoutError } from '../../core/errors/domain-errors.ts';
+import type { ILogger } from '../../core/logger/logger.interface.ts';
 import { DEFAULT_ADMIN_VALUES, type AdminValues } from '../../domain/models/vehicle.ts';
 import type { Frame } from '../../domain/models/frame-context.ts';
 import type {
@@ -11,15 +17,21 @@ import type {
 
 /**
  * Implementación de IDomExtractor sobre Puppeteer.
+ *
  * Encapsula:
  *   - `frame.content()` → HTML crudo
  *   - `frame.evaluate` → extracción de valores por selector
- *   - `frame.waitForSelector` con timeout 0 (espera indefinida como el original)
+ *   - `frame.waitForSelector` con timeout finito configurable
  *
- * Los errores de timeout de Puppeteer se traducen a `SelectorTimeoutError`
- * con el selector que falló para que el reporte en consola sea accionable.
+ * Los errores de timeout se traducen a `SelectorTimeoutError` con el
+ * selector que falló, el HTML actual (snippet) y la ruta del dump
+ * completo a disco (si `appConfig.debug.dumpHtmlOnError === true`).
+ * Esto evita que un selector que no aparece deje el runner
+ * estancado sin notificar.
  */
 export class PuppeteerDomExtractor implements IDomExtractor {
+  constructor(private readonly logger: ILogger) {}
+
   async extractHtml(frame: Frame): Promise<string> {
     return (frame as PuppeteerFrame).content();
   }
@@ -29,9 +41,101 @@ export class PuppeteerDomExtractor implements IDomExtractor {
     selector: string,
     waitMs: number,
   ): Promise<string> {
-    await this.waitForSelectorOrThrow(frame, selector, 0);
+    await this.safeWaitForSelector(frame, selector, appConfig.timeouts.selectorWaitMs, {
+      phase: 'waitAndExtract',
+      selector,
+    });
     await delay(waitMs);
     return this.extractHtml(frame);
+  }
+
+  async safeWaitForSelector(
+    frame: Frame,
+    selector: string,
+    timeoutMs: number,
+    context: Partial<ErrorContext> = {},
+  ): Promise<void> {
+    const t0 = Date.now();
+    const progressMs = appConfig.timeouts.logWaitProgressMs;
+    const isMainFrame = (frame as { isMainFrame?(): boolean }).isMainFrame?.() ?? false;
+
+    this.logger.debug(
+      `Esperando selector "${selector}" (timeout ${timeoutMs}ms, isMainFrame=${isMainFrame})`,
+      { selector, timeoutMs, phase: context.phase, vin: context.vin },
+    );
+
+    // Aviso periódico (WARN) mientras la espera está activa, para evitar
+    // que el operador piense que el proceso está congelado.
+    const stopFlag = { stopped: false };
+    const progressTimer = progressMs > 0 ? setInterval(() => {
+      if (stopFlag.stopped) return;
+      const elapsed = Date.now() - t0;
+      this.logger.warn(
+        `El selector "${selector}" aún no aparece (${elapsed}ms/${timeoutMs}ms)`,
+        { selector, elapsedMs: elapsed, timeoutMs, phase: context.phase, vin: context.vin },
+      );
+    }, progressMs) : null;
+
+    try {
+      await (frame as PuppeteerFrame).waitForSelector(selector, { timeout: timeoutMs });
+      const elapsed = Date.now() - t0;
+      if (elapsed > 3000) {
+        this.logger.debug(
+          `Selector "${selector}" apareció tras ${elapsed}ms`,
+          { selector, elapsedMs: elapsed, phase: context.phase, vin: context.vin },
+        );
+      }
+    } catch (err) {
+      const elapsed = Date.now() - t0;
+      const htmlSnippet = await this.safeHtmlSnippet(frame);
+
+      // Volcado HTML a disco para diagnóstico post-mortem.
+      const dump = await writeHtmlDumpToDisk(
+        htmlSnippet,
+        frame,
+        { ...context, selector },
+        { enabled: appConfig.debug.dumpHtmlOnError, dir: appConfig.debug.dumpDir },
+        this.logger,
+      );
+
+      const dumpInfo = dump
+        ? `HTML dump: ${dump.path} (${dump.bytes} bytes)`
+        : 'HTML dump no disponible';
+
+      this.logger.error(
+        `Timeout esperando selector "${selector}" tras ${elapsed}ms (cap=${timeoutMs}ms). ${dumpInfo}`,
+        {
+          selector,
+          elapsedMs: elapsed,
+          timeoutMs,
+          phase: context.phase,
+          vin: context.vin,
+          vehicleId: context.vehicleId,
+          htmlDumpPath: dump?.path,
+        },
+      );
+
+      throw new SelectorTimeoutError(
+        `Timeout esperando selector "${selector}" tras ${elapsed}ms`,
+        {
+          selector,
+          phase: context.phase ?? 'capture',
+          vin: context.vin,
+          vehicleId: context.vehicleId,
+          htmlSnippet,
+          extra: {
+            originalMessage: (err as Error).message,
+            elapsedMs: elapsed,
+            timeoutMs,
+            htmlDumpPath: dump?.path,
+          },
+        },
+        { cause: err as Error },
+      );
+    } finally {
+      stopFlag.stopped = true;
+      if (progressTimer !== null) clearInterval(progressTimer);
+    }
   }
 
   async extractValues<T extends Record<string, string>>(
@@ -95,34 +199,6 @@ export class PuppeteerDomExtractor implements IDomExtractor {
     };
     merged.fecha_entrega = merged.fecha_entrega.replace(/\./g, '-');
     return merged;
-  }
-
-  /**
-   * Espera un selector y, si falla, lanza `SelectorTimeoutError`
-   * con el selector y un snippet del HTML actual.
-   */
-  private async waitForSelectorOrThrow(
-    frame: Frame,
-    selector: string,
-    timeoutMs: number,
-  ): Promise<void> {
-    try {
-      await (frame as PuppeteerFrame).waitForSelector(selector, {
-        timeout: timeoutMs,
-      });
-    } catch (err) {
-      const htmlSnippet = await this.safeHtmlSnippet(frame);
-      throw new SelectorTimeoutError(
-        `Timeout esperando selector "${selector}"`,
-        {
-          selector,
-          phase: 'capture',
-          htmlSnippet,
-          extra: { originalMessage: (err as Error).message },
-        },
-        { cause: err as Error },
-      );
-    }
   }
 
   private async safeHtmlSnippet(frame: Frame): Promise<string | undefined> {

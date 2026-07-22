@@ -1,4 +1,5 @@
 import { Selectors } from '../../../core/config/selectors.ts';
+import { appConfig } from '../../../core/config/app-config.ts';
 import { stringToBase64 } from '../../../core/utils/base64.ts';
 import { delay } from '../../../core/utils/delay.ts';
 import type { IAuditLogger } from '../../../domain/ports/audit-logger.interface.ts';
@@ -37,7 +38,10 @@ export class CaptureHistoricSection implements ISectionCapture {
           opts: { timeout: number; waitUntil: 'visible' },
         ): Promise<{ click(): Promise<void> } | null>;
       }
-    ).$(Selectors.historic.moreButton, { timeout: 0, waitUntil: 'visible' });
+    ).$(Selectors.historic.moreButton, {
+      timeout: appConfig.timeouts.selectorWaitMs,
+      waitUntil: 'visible',
+    });
 
     if (moreBtn) await moreBtn.click();
     await delay(1500);

@@ -1,4 +1,5 @@
 import { Selectors } from '../../core/config/selectors.ts';
+import { appConfig } from '../../core/config/app-config.ts';
 import { delay } from '../../core/utils/delay.ts';
 import {
   AuthError,
@@ -52,7 +53,7 @@ export class Phase1AuthUseCase {
         ): Promise<{ click(): Promise<void> }>;
       };
       const icmSpan = await page.waitForSelector(Selectors.phase1.icmModuleSpan, {
-        timeout: 0,
+        timeout: appConfig.timeouts.loginSelectorWaitMs,
       });
       await delay(2000);
       await icmSpan.click();

@@ -1,5 +1,5 @@
 import { Selectors, MenuNames } from '../../core/config/selectors.ts';
-import { buildVehicleUrl } from '../../core/config/app-config.ts';
+import { appConfig, buildVehicleUrl } from '../../core/config/app-config.ts';
 import {
   ConnectionRefusedError,
   FrameNotFoundError,
@@ -111,7 +111,10 @@ export class ProcessVehicleUseCase {
     while (true) {
       attempt++;
       try {
-        await page.waitForSelector('html', { timeout: 0, waitUntil: 'load' });
+        await page.waitForSelector('html', {
+          timeout: appConfig.timeouts.selectorWaitMs,
+          waitUntil: 'load',
+        });
         html = await page.content();
       } catch (err) {
         if (attempt >= maxAttempts) {
@@ -176,7 +179,10 @@ export class ProcessVehicleUseCase {
 
     try {
       await delay(4000);
-      await page.goto(gotoUrl, { timeout: 0, waitUntil: 'load' });
+      await page.goto(gotoUrl, {
+        timeout: appConfig.timeouts.navigationWaitMs,
+        waitUntil: 'load',
+      });
     } catch (err) {
       const classified = classifyError(err, {
         phase: 'identify.goto',
@@ -188,9 +194,34 @@ export class ProcessVehicleUseCase {
     }
     await delay(1000);
     this.logger.info('Loading frames');
-    await page.waitForSelector(Selectors.frames.mainFrameset, {
-      timeout: 0,
-      waitUntil: 'load',
+
+    // Esperar el frameset con retry-loop (antes era una espera infinita
+    // con `timeout: 0` que dejaba el runner colgado sin notificar).
+    await this.withSelectorRetry({
+      label: 'identify.frames',
+      selector: Selectors.frames.mainFrameset,
+      timeoutMs: appConfig.timeouts.selectorWaitMs,
+      maxAttempts: appConfig.timeouts.selectorRetryAttempts,
+      backoffMs: appConfig.timeouts.selectorRetryBackoffMs,
+      vin: ctx.vin,
+      wait: async () =>
+        page.waitForSelector(Selectors.frames.mainFrameset, {
+          timeout: appConfig.timeouts.selectorWaitMs,
+          waitUntil: 'load',
+        }),
+      buildError: (lastErr, attempts) =>
+        new FrameNotFoundError(
+          `No apareció el frameset "${Selectors.frames.mainFrameset}" tras ${attempts} intentos`,
+          {
+            phase: 'identify.frames',
+            vin: ctx.vin,
+            attempt: attempts,
+            selector: Selectors.frames.mainFrameset,
+            url: safeUrl(page),
+            extra: { originalMessage: (lastErr as Error).message },
+          },
+          { cause: lastErr as Error },
+        ),
     });
     this.logger.info('Main frameset loaded');
 
@@ -218,6 +249,54 @@ export class ProcessVehicleUseCase {
 
     this.logger.info('Frames loaded');
     return { frameBody: frameBody as Frame, frameMenu: frameMenu as Frame, menuItems };
+  }
+
+  /**
+   * Ejecuta `wait()` con un cap finito y, si falla, reintenta hasta
+   * `maxAttempts` veces con `backoffMs` de espera entre intentos.
+   *
+   * Loguea cada intento y, si se agotan los intentos, lanza el error
+   * producido por `buildError(lastErr, attempts)`.
+   *
+   * Esto evita que un selector del sitio (ej. `mainFrameset`) deje el
+   * runner colgado indefinidamente sin notificar.
+   */
+  private async withSelectorRetry<T>(opts: {
+    label: string;
+    selector?: string;
+    timeoutMs: number;
+    maxAttempts: number;
+    backoffMs: number;
+    vin?: string;
+    wait: () => Promise<T>;
+    buildError: (lastErr: unknown, attempts: number) => Error;
+  }): Promise<T> {
+    let lastErr: unknown;
+    for (let attempt = 1; attempt <= opts.maxAttempts; attempt++) {
+      this.logger.info(
+        `${opts.label}: intento ${attempt}/${opts.maxAttempts} (timeout ${opts.timeoutMs}ms)`,
+        { phase: opts.label, attempt, selector: opts.selector, vin: opts.vin },
+      );
+      try {
+        return await opts.wait();
+      } catch (err) {
+        lastErr = err;
+        this.logger.warn(
+          `${opts.label}: intento ${attempt}/${opts.maxAttempts} falló`,
+          {
+            phase: opts.label,
+            attempt,
+            selector: opts.selector,
+            vin: opts.vin,
+            error: (err as Error).message,
+          },
+        );
+        if (attempt < opts.maxAttempts) {
+          await delay(opts.backoffMs);
+        }
+      }
+    }
+    throw opts.buildError(lastErr, opts.maxAttempts);
   }
 }
 

@@ -69,7 +69,7 @@ export function bootstrap(options: BootstrapOptions = {}): BuiltGraph {
   const browser = new PuppeteerBrowserSession(logger, autoIt);
 
   const navigator = new PuppeteerFrameNavigator(logger);
-  const extractor = new PuppeteerDomExtractor();
+  const extractor = new PuppeteerDomExtractor(logger);
 
   const sections: Record<SectionKey, import('../application/usecases/sections/section-capture.interface.ts').ISectionCapture> =
     {

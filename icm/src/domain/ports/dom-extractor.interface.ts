@@ -1,3 +1,4 @@
+import type { ErrorContext } from '../../core/errors/domain-errors.ts';
 import type { AdminValues } from '../models/vehicle.ts';
 import type { Frame } from '../models/frame-context.ts';
 
@@ -20,6 +21,26 @@ export interface IDomExtractor {
     selector: string,
     waitMs: number,
   ): Promise<string>;
+
+  /**
+   * Espera un selector con un cap finito (`timeoutMs`).
+   *
+   * A diferencia de `waitForSelector` puro, esta función:
+   *   - Loguea `DEBUG` al iniciar la espera.
+   *   - Loguea `WARN` cada `logWaitProgressMs` mientras espera (anti-estancamiento).
+   *   - Si supera el timeout: vuelca el HTML del frame a disco
+   *     (si `appConfig.debug.dumpHtmlOnError === true`), loguea `ERROR`
+   *     con la ruta del dump y lanza `SelectorTimeoutError`.
+   *
+   * Cualquier `waitForSelector` del proyecto debe pasar por aquí
+   * para que el estancamiento sea diagnosticable.
+   */
+  safeWaitForSelector(
+    frame: Frame,
+    selector: string,
+    timeoutMs: number,
+    context?: Partial<ErrorContext>,
+  ): Promise<void>;
 
   /**
    * Evalúa `document.querySelector` por cada selector del plan

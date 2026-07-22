@@ -50,12 +50,33 @@ export interface AppConfig {
     connectionRefusedBackoffMs: number;
     postIdentifyWaitMs: number;
     sectionWaitMs: number;
+    /** Cap por defecto para `waitForSelector` en frames y secciones del menú ICM. */
+    selectorWaitMs: number;
+    /** Cap para `waitForSelector` en login (SSO de Renault es lento). */
+    loginSelectorWaitMs: number;
+    /** Cap para `page.goto` / `page.waitForNavigation`. */
+    navigationWaitMs: number;
+    /** Cada cuántos ms se loguea WARN de progreso mientras se espera un selector. */
+    logWaitProgressMs: number;
+    /** Reintentos al fallar `waitForSelector` para sitios lentos (frameset). */
+    selectorRetryAttempts: number;
+    /** Backoff entre reintentos (ms). */
+    selectorRetryBackoffMs: number;
   };
   /** Mensajes de diálogo conocidos del navegador ICM. */
   dialogMessages: {
     vinUnknown: string[];
     pauseF0023: string;
     pausePM: string;
+  };
+  /** Configuración de diagnóstico (HTML dumps a disco cuando falla un selector). */
+  debug: {
+    /** Si true, vuelca el HTML completo del frame/página a disco cuando un selector falla. */
+    dumpHtmlOnError: boolean;
+    /** Cada cuántos ms vuelca HTML parcial durante la espera (0 = solo al fallar). */
+    dumpHtmlProgressMs: number;
+    /** Directorio donde se vuelcan los HTML (relativo a process.cwd()). */
+    dumpDir: string;
   };
 }
 
@@ -91,6 +112,12 @@ export const appConfig: AppConfig = {
     connectionRefusedBackoffMs: 1000 * 60 * 5,
     postIdentifyWaitMs: 4000,
     sectionWaitMs: 3000,
+    selectorWaitMs: 30_000,
+    loginSelectorWaitMs: 60_000,
+    navigationWaitMs: 30_000,
+    logWaitProgressMs: 10_000,
+    selectorRetryAttempts: 3,
+    selectorRetryBackoffMs: 2000,
   },
   dialogMessages: {
     vinUnknown: [
@@ -99,6 +126,11 @@ export const appConfig: AppConfig = {
     ],
     pauseF0023: 'Mensaje F0023',
     pausePM: 'Verificar si se visualiza una fecha de entrega en ICM',
+  },
+  debug: {
+    dumpHtmlOnError: process.env.ICM_DUMP_HTML_ON_ERROR !== '0',
+    dumpHtmlProgressMs: 0,
+    dumpDir: process.env.ICM_DUMP_DIR ?? 'logs',
   },
 };
 

@@ -1,4 +1,5 @@
 import { Selectors } from '../../core/config/selectors.ts';
+import { appConfig } from '../../core/config/app-config.ts';
 import { delay } from '../../core/utils/delay.ts';
 import {
   AuthError,
@@ -39,13 +40,19 @@ export class IcmLoginUseCase {
         ): Promise<{ click(): Promise<void> }>;
       };
 
-      await page.waitForNavigation({ timeout: 0, waitUntil: 'load' });
+      await page.waitForNavigation({
+        timeout: appConfig.timeouts.navigationWaitMs,
+        waitUntil: 'load',
+      });
       this.logger.info('ICM: initial navigation loaded');
 
       try {
         const btnAccess = await page.waitForSelector(
           Selectors.icmLogin.accessButton,
-          { waitUntil: 'load', timeout: 0 },
+          {
+            waitUntil: 'load',
+            timeout: appConfig.timeouts.loginSelectorWaitMs,
+          },
         );
         await delay(1000);
         await btnAccess.click();
@@ -79,7 +86,10 @@ export class IcmLoginUseCase {
       try {
         const validateBtn = await page.waitForSelector(
           Selectors.icmLogin.validateButton,
-          { timeout: 0, waitUntil: 'load' },
+          {
+            timeout: appConfig.timeouts.loginSelectorWaitMs,
+            waitUntil: 'load',
+          },
         );
         await delay(1000);
         await validateBtn.click();
