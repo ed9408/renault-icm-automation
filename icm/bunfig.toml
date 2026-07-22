@@ -1,0 +1,8 @@
+# Configuración del runner de tests y del runtime.
+[test]
+# Solo recoge tests bajo /tests, evita que se ejecuten los entry points.
+root = "tests"
+
+[install]
+# Resolver opcional nativo de Bun para Node-compat.
+exact = false

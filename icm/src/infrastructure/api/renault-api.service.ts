@@ -1,0 +1,152 @@
+import { appConfig } from '../../core/config/app-config.ts';
+import { BackendError } from '../../core/errors/domain-errors.ts';
+import type {
+  ApiAck,
+  IApiService,
+  VinResponse,
+} from '../../domain/ports/api-service.interface.ts';
+import type { IHttpClient } from '../../domain/ports/http-client.interface.ts';
+import type { VehicleContext, VehicleReport } from '../../domain/models/vehicle.ts';
+
+const CMD = {
+  getVin: 'get_vin',
+  setVinData: 'set_vin_data',
+  unknownVin: 'unknow_vin',
+  reportAudit: 'report_auditory',
+} as const;
+
+function endpointHeaders(): Record<string, string> {
+  return {
+    Authorization: `Bearer ${appConfig.api.token}`,
+  };
+}
+
+/**
+ * Implementación de IApiService que replica la lógica de `queries.mjs`
+ * (Get_vin, Send_Data, Send_Unknow_vin, SEND_AUDITA_DEF).
+ *
+ * Recibe IHttpClient por constructor → testeable sin red.
+ */
+export class RenaultApiService implements IApiService {
+  constructor(private readonly http: IHttpClient) {}
+
+  async getVin(
+    lastId: string,
+  ): Promise<{ error: boolean; data: VinResponse['transactionMessage'] }> {
+    try {
+      const resp = (await this.http.request(
+        {
+          host: appConfig.api.endpoint.host,
+          path: appConfig.api.endpoint.path,
+          headers: endpointHeaders(),
+        },
+        { cmd: CMD.getVin, id: lastId },
+      )) as VinResponse;
+
+      if (resp.transactionStatus !== 200) {
+        return { error: true, data: {} as VinResponse['transactionMessage'] };
+      }
+
+      return { error: false, data: resp.transactionMessage };
+    } catch (err) {
+      throw new BackendError(
+        `getVin failed: ${(err as Error).message}`,
+        { phase: 'api.getVin', extra: { originalMessage: (err as Error).message } },
+        { cause: err as Error },
+      );
+    }
+  }
+
+  async sendData(
+    context: VehicleContext,
+    report: VehicleReport,
+  ): Promise<{ error: boolean; data?: unknown }> {
+    const payload = {
+      cmd: CMD.setVinData,
+      id: context.id,
+      vin: context.vin,
+      tipo: context.tipo,
+      km: context.km,
+      data: report,
+    };
+
+    try {
+      const resp = (await this.http.request(
+        {
+          host: appConfig.api.endpoint.host,
+          path: appConfig.api.endpoint.path,
+          headers: endpointHeaders(),
+        },
+        payload,
+      )) as ApiAck;
+
+      if (resp.transactionStatus !== 200) {
+        return { error: true, data: {} };
+      }
+      return { error: false };
+    } catch (err) {
+      throw new BackendError(
+        `sendData failed: ${(err as Error).message}`,
+        { phase: 'api.sendData', extra: { originalMessage: (err as Error).message } },
+        { cause: err as Error },
+      );
+    }
+  }
+
+  async sendUnknownVin(id: string, vin: string): Promise<{ error: boolean }> {
+    const payload = {
+      cmd: CMD.unknownVin,
+      id,
+      vin,
+    };
+    try {
+      const resp = (await this.http.request(
+        {
+          host: appConfig.api.endpoint.host,
+          path: appConfig.api.endpoint.path,
+          headers: endpointHeaders(),
+        },
+        payload,
+      )) as ApiAck;
+
+      if (resp.transactionStatus !== 200) {
+        return { error: true };
+      }
+      return { error: false };
+    } catch (err) {
+      throw new BackendError(
+        `sendUnknownVin failed: ${(err as Error).message}`,
+        { phase: 'api.sendUnknownVin', extra: { originalMessage: (err as Error).message } },
+        { cause: err as Error },
+      );
+    }
+  }
+
+  async sendAudit(actions: unknown[]): Promise<{ error: boolean }> {
+    const payload = {
+      cmd: CMD.reportAudit,
+      actions,
+    };
+    try {
+      const resp = (await this.http.request(
+        {
+          host: appConfig.api.endpoint.host,
+          path: appConfig.api.endpoint.path,
+          headers: endpointHeaders(),
+        },
+        payload,
+      )) as ApiAck;
+
+      if (resp.transactionStatus !== 200) {
+        return { error: true };
+      }
+      return { error: false };
+    } catch (err) {
+      throw new BackendError(
+        `sendAudit failed: ${(err as Error).message}`,
+        { phase: 'api.sendAudit', extra: { originalMessage: (err as Error).message } },
+        { cause: err as Error },
+      );
+    }
+  }
+}
