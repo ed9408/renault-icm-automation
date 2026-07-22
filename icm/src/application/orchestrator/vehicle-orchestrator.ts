@@ -19,6 +19,12 @@ import type { IBrowserSession } from '../../domain/ports/browser-session.interfa
 import type { IcmLoginUseCase } from '../usecases/icm-login.usecase.ts';
 import type { Phase1AuthUseCase } from '../usecases/phase1-auth.usecase.ts';
 import type { ProcessVehicleUseCase } from '../usecases/process-vehicle.usecase.ts';
+import {
+  buildEndpointUrl,
+  maskedAuth,
+  summarizeAuditActions,
+  summarizeVehicleReport,
+} from '../../infrastructure/api/payload-preview.ts';
 
 export interface OrchestratorDeps {
   browser: IBrowserSession;
@@ -230,7 +236,35 @@ export class VehicleOrchestrator {
   ): Promise<void> {
     const { api, audit, logger } = this.deps;
     if (this.options.dryRun) {
-      logger.info('Dry-run: skipping sendData / audit flush', { vin: ctx.vin });
+      logger.info('🔍 DRY-RUN: NO se enviará información al backend', {
+        vin: ctx.vin,
+      });
+      logger.info('→ set_vin_data (preview)', {
+        url: buildEndpointUrl(),
+        auth: maskedAuth(),
+        payload: {
+          cmd: 'set_vin_data',
+          id: ctx.id,
+          vin: ctx.vin,
+          tipo: ctx.tipo,
+          km: ctx.km,
+          data: summarizeVehicleReport(report),
+        },
+      });
+      const auditEntries = audit.snapshot();
+      if (auditEntries.length > 0) {
+        logger.info('→ report_auditory (preview)', {
+          url: buildEndpointUrl(),
+          auth: maskedAuth(),
+          payload: {
+            cmd: 'report_auditory',
+            count: auditEntries.length,
+            actions: summarizeAuditActions(auditEntries),
+          },
+        });
+      } else {
+        logger.info('No audit entries to preview', { vin: ctx.vin });
+      }
       return;
     }
     try {

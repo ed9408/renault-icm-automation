@@ -62,7 +62,7 @@ export function bootstrap(options: BootstrapOptions = {}): BuiltGraph {
   const errorReporter = new LoggerErrorReporter(logger);
 
   const http = new FetchHttpClient();
-  const api = new RenaultApiService(http);
+  const api = new RenaultApiService(http, logger);
   const audit = new InMemoryAuditLogger(api);
 
   const autoIt = new WindowsAutoItRunner(logger);

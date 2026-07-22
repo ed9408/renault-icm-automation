@@ -1,5 +1,6 @@
 import { appConfig } from '../../core/config/app-config.ts';
 import { BackendError } from '../../core/errors/domain-errors.ts';
+import type { ILogger } from '../../core/logger/logger.interface.ts';
 import type {
   ApiAck,
   IApiService,
@@ -7,6 +8,12 @@ import type {
 } from '../../domain/ports/api-service.interface.ts';
 import type { IHttpClient } from '../../domain/ports/http-client.interface.ts';
 import type { VehicleContext, VehicleReport } from '../../domain/models/vehicle.ts';
+import {
+  buildEndpointUrl,
+  maskedAuth,
+  summarizeAuditActions,
+  summarizeVehicleReport,
+} from './payload-preview.ts';
 
 const CMD = {
   getVin: 'get_vin',
@@ -26,13 +33,32 @@ function endpointHeaders(): Record<string, string> {
  * (Get_vin, Send_Data, Send_Unknow_vin, SEND_AUDITA_DEF).
  *
  * Recibe IHttpClient por constructor → testeable sin red.
+ * Recibe ILogger para loguear cada envío (cmd, url, auth enmascarada,
+ * payload resumido) antes de salir al HTTP real.
  */
 export class RenaultApiService implements IApiService {
-  constructor(private readonly http: IHttpClient) {}
+  constructor(
+    private readonly http: IHttpClient,
+    private readonly logger: ILogger,
+  ) {}
+
+  private logOutgoing(
+    cmd: string,
+    payload: unknown,
+    payloadSummary: unknown,
+  ): void {
+    this.logger.info(`→ ${cmd}`, {
+      url: buildEndpointUrl(),
+      auth: maskedAuth(),
+      payload: payloadSummary ?? payload,
+    });
+  }
 
   async getVin(
     lastId: string,
   ): Promise<{ error: boolean; data: VinResponse['transactionMessage'] }> {
+    const payload = { cmd: CMD.getVin, id: lastId };
+    this.logOutgoing(CMD.getVin, payload, payload);
     try {
       const resp = (await this.http.request(
         {
@@ -69,8 +95,13 @@ export class RenaultApiService implements IApiService {
       km: context.km,
       data: report,
     };
+    const summary = {
+      ...payload,
+      data: summarizeVehicleReport(report),
+    };
 
     try {
+      this.logOutgoing(CMD.setVinData, payload, summary);
       const resp = (await this.http.request(
         {
           host: appConfig.api.endpoint.host,
@@ -100,6 +131,7 @@ export class RenaultApiService implements IApiService {
       vin,
     };
     try {
+      this.logOutgoing(CMD.unknownVin, payload, payload);
       const resp = (await this.http.request(
         {
           host: appConfig.api.endpoint.host,
@@ -127,7 +159,16 @@ export class RenaultApiService implements IApiService {
       cmd: CMD.reportAudit,
       actions,
     };
+    const summary = {
+      cmd: CMD.reportAudit,
+      actions: summarizeAuditActions(
+        actions as Parameters<typeof summarizeAuditActions>[0],
+      ),
+      count: actions.length,
+    };
+
     try {
+      this.logOutgoing(CMD.reportAudit, payload, summary);
       const resp = (await this.http.request(
         {
           host: appConfig.api.endpoint.host,
