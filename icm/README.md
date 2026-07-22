@@ -48,11 +48,18 @@ Variables de entorno (con fallback al valor por defecto):
 
 |       Variable        |           Descripción            |
 |-----------------------|----------------------------------|
-| `ICM_API_TOKEN`       | Bearer token del backend CRM     |
+| `ICM_API_URL`         | API url del backend              |
+| `ICM_API_TOKEN`       | Bearer token del backend         |
 | `ICM_AUTOIT_EXE`      | Ruta al ejecutable `AutoIt3.exe` |
 | `ICM_AUTOIT_ENTERS`   | Ruta a `enters.au3`              |
 | `ICM_AUTOIT_PASSWORD` | Ruta a `enter_password.au3`      |
 | `ICM_TEST_VIN`        | VIN para `bun run start:test`    |
+
+Para configurar las variables de entorno en PowerShell se hace de la siguiente forma:
+
+```pwsh
+[Environment]::SetEnvironmentVariable("ICM_AUTOIT_EXE", "MyValue", "User")
+```
 
 Las rutas y URLs también están centralizadas en [src/core/config/app-config.ts](src/core/config/app-config.ts).
 Los selectores CSS del sitio ICM, en [src/core/config/selectors.ts](src/core/config/selectors.ts).

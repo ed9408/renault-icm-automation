@@ -65,7 +65,7 @@ const DEFAULT_TOKEN =
 export const appConfig: AppConfig = {
   api: {
     endpoint: {
-      host: 'intranet.caribemotor.com.co',
+      host: process.env.ICM_API_URL ?? 'intranet.caribemotor.com.co',
       path: '/v2_base/index_notema.php?sub_cat=api_icm',
     },
     token: process.env.ICM_API_TOKEN ?? DEFAULT_TOKEN,
