@@ -170,6 +170,9 @@ export class VehicleOrchestrator {
 
       if (nextResp.error || !nextResp.data) {
         // Cola vacía: NO cerramos el navegador. Esperamos `queueEmptyMs` y re-consultamos.
+        // NO se re-autentica: la sesión sigue viva y re-autenticarse corrompería el estado
+        // (navegaría a la URL de login sobre una página ya logueada y los selectores de
+        // phase1/icmLogin no existirían, rompiendo la siguiente consulta del VIN).
         logger.info('Cola vacía: esperando antes de re-consultar el CRM', {
           ms: appConfig.timeouts.queueEmptyMs,
         });
@@ -177,9 +180,7 @@ export class VehicleOrchestrator {
         continue;
       }
 
-      // Hay VINes: re-autenticar reusando la misma página (sin lanzar Chromium nuevo)
-      // y procesar el batch reusando la lógica previa.
-      await this.reAuthenticate();
+      // Hay VINes: procesar el batch directamente con la sesión viva.
       await this.processBatch(nextResp);
     }
   }
@@ -214,25 +215,6 @@ export class VehicleOrchestrator {
       }
       nextResp = next;
     }
-  }
-
-  /**
-   * Re-autentica reusando la misma página de Puppeteer (no lanza Chromium nuevo).
-   * Se invoca tras detectar VINes nuevos después de una espera por cola vacía.
-   */
-  private async reAuthenticate(): Promise<void> {
-    const { browser, phase1, icmLogin, logger } = this.deps;
-    logger.info('Re-autenticando tras espera de cola vacía', {
-      waitMs: appConfig.timeouts.queueEmptyMs,
-    });
-    await browser.launch({
-      url: appConfig.browser.loginUrl,
-      fullscreen: appConfig.browser.fullscreen,
-      reuse: true,
-    });
-    await phase1.confirmAccess();
-    await phase1.selectIcmMod();
-    await icmLogin.login();
   }
 
   private async resolveContext(

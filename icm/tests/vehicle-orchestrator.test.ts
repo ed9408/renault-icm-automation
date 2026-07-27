@@ -157,8 +157,9 @@ describe('VehicleOrchestrator — processAllPending', () => {
     expect(callCount).toBeGreaterThanOrEqual(3);
   });
 
-  it('re-autentica con reuse:true (no lanza Chromium nuevo) cuando aparecen VINes tras la espera', async () => {
+  it('NO re-autentica cuando aparecen VINes tras la espera: solo procesa el batch', async () => {
     const api = makeApi();
+    const processVehicle = makeProcessVehicle();
     let callCount = 0;
     (api.getVin as ReturnType<typeof mock>).mockImplementation(async () => {
       callCount++;
@@ -172,22 +173,29 @@ describe('VehicleOrchestrator — processAllPending', () => {
       return { error: false, data: undefined };
     });
 
-    const { browser, orchestrator } = build({ api });
+    const { browser, orchestrator } = build({ api, processVehicle });
 
     await orchestrator.runForever().catch(() => {});
 
     const launchCalls = (browser.launch as ReturnType<typeof mock>).mock.calls;
-    // 1ª launch: la inicial al arrancar runForever.
-    // 2ª launch: reAuthenticate() tras la espera de cola vacía (reuse=true).
-    expect(launchCalls.length).toBe(2);
+    // SOLO el launch inicial. NO se re-autentica tras la espera por cola vacía,
+    // porque la sesión del navegador sigue viva y re-autenticarse la corrompería.
+    expect(launchCalls.length).toBe(1);
 
-    // El primer launch NO debe tener reuse (o reuse=false).
+    // El primer launch NO debe tener reuse.
     const firstOptions = launchCalls[0]?.[0] as { reuse?: boolean };
     expect(firstOptions.reuse).toBeFalsy();
 
-    // El segundo launch SÍ debe tener reuse=true.
-    const secondOptions = launchCalls[1]?.[0] as { reuse?: boolean };
-    expect(secondOptions.reuse).toBe(true);
+    // El batch del VIN aparecido se procesó una sola vez.
+    const processCalls = (processVehicle.process as ReturnType<typeof mock>)
+      .mock.calls;
+    expect(processCalls.length).toBe(1);
+    expect(processCalls[0]?.[0]).toEqual({
+      id: SAMPLE_VIN.lastId,
+      vin: SAMPLE_VIN.vin,
+      tipo: SAMPLE_VIN.tipo,
+      km: SAMPLE_VIN.km,
+    });
   });
 
   it('cuando la cola sigue vacía tras la espera, NO se invoca reAuthenticate', async () => {
