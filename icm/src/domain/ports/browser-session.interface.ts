@@ -5,6 +5,13 @@ export interface BrowserLaunchOptions {
   url: string;
   /** Si true, agrega `--start-fullscreen` a Chromium. */
   fullscreen: boolean;
+  /**
+   * Si true y ya existe una página viva, reusa la página existente
+   * navegando a `url` en lugar de lanzar un Chromium nuevo.
+   * Útil para re-autenticar tras una espera prolongada (cola vacía).
+   * Si no hay página viva, el comportamiento es equivalente a `false`.
+   */
+  reuse?: boolean;
 }
 
 export type DialogMessageHandler = (message: string) => Promise<'accept' | 'dismiss'>;

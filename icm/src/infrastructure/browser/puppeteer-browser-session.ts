@@ -24,6 +24,8 @@ import type { IAutoItRunner } from '../../domain/ports/autoit-runner.interface.t
 export class PuppeteerBrowserSession implements IBrowserSession {
   private browser: PuppeteerBrowser | null = null;
   private page: PuppeteerPage | null = null;
+  /** Handle del timer de `autoIt.enterPassword()` para evitar apilar timers en re-launches. */
+  private passwordTimer: ReturnType<typeof setTimeout> | null = null;
 
   private readonly dialogHandlers: DialogMessageHandler[] = [];
   private readonly closeHandlers: PageCloseHandler[] = [];
@@ -34,6 +36,32 @@ export class PuppeteerBrowserSession implements IBrowserSession {
   ) {}
 
   async launch(options: BrowserLaunchOptions): Promise<BrowserContext> {
+    // Reutilizar la página existente (mismo Chromium) si se solicita y la página sigue viva.
+    if (options.reuse && this.page && !this.page.isClosed()) {
+      this.logger.info('Reusing existing browser page', { url: options.url });
+      const page = this.page;
+
+      // Limpia listeners previos para evitar acumulación en re-navegaciones.
+      page.removeAllListeners('dialog');
+      page.removeAllListeners('close');
+      page.on('dialog', (dialog) => this.handleDialog(dialog));
+      page.on('close', () => this.handleClose());
+
+      // Re-programa el timer de password (cancela el previo si estuviera pendiente).
+      this.schedulePasswordScript();
+
+      await page.setViewport({
+        width: appConfig.browser.viewport.width,
+        height: appConfig.browser.viewport.height,
+      });
+
+      await delay(1000);
+      await page.goto(options.url);
+
+      this.logger.info('Browser page reused');
+      return { browser: this.browser!, page };
+    }
+
     this.logger.info('Launching browser', { url: options.url });
 
     const args = [
@@ -56,14 +84,7 @@ export class PuppeteerBrowserSession implements IBrowserSession {
     if (!page) throw new Error('No default page returned by Puppeteer');
     this.page = page;
 
-    // Programa la entrada de contraseña (mimetiza el setTimeout original).
-    setTimeout(() => {
-      void (async () => {
-        this.logger.info('Triggering scheduled password script');
-        await delay(1500);
-        await this.autoIt.enterPassword();
-      })();
-    }, appConfig.browser.passwordScriptDelayMs);
+    this.schedulePasswordScript();
 
     page.on('dialog', (dialog) => this.handleDialog(dialog));
     page.on('close', () => this.handleClose());
@@ -77,13 +98,49 @@ export class PuppeteerBrowserSession implements IBrowserSession {
     await page.goto(options.url);
 
     this.logger.info('Browser launched');
-    return { browser: this.browser, page };
+    return { browser: this.browser!, page };
   }
 
   async close(): Promise<void> {
-    if (!this.page) return;
-    if (this.page.isClosed()) return;
-    await this.page.close();
+    // Cancela el timer pendiente para que no dispare contra un browser ya cerrado.
+    if (this.passwordTimer) {
+      clearTimeout(this.passwordTimer);
+      this.passwordTimer = null;
+    }
+
+    const results = await Promise.allSettled([
+      this.page && !this.page.isClosed() ? this.page.close() : Promise.resolve(),
+      this.browser && this.browser.connected
+        ? this.browser.close()
+        : Promise.resolve(),
+    ]);
+
+    for (const r of results) {
+      if (r.status === 'rejected') {
+        this.logger.warn('Browser close partial failure', {
+          error: (r.reason as Error)?.message,
+        });
+      }
+    }
+
+    // Reset para que el próximo `launch()` arranque desde cero.
+    this.page = null;
+    this.browser = null;
+  }
+
+  private schedulePasswordScript(): void {
+    if (this.passwordTimer) {
+      clearTimeout(this.passwordTimer);
+      this.passwordTimer = null;
+    }
+    this.passwordTimer = setTimeout(() => {
+      this.passwordTimer = null;
+      void (async () => {
+        this.logger.info('Triggering scheduled password script');
+        await delay(1500);
+        await this.autoIt.enterPassword();
+      })();
+    }, appConfig.browser.passwordScriptDelayMs);
   }
 
   getPage(): PuppeteerPage {

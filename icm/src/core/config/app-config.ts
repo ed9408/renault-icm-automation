@@ -62,6 +62,11 @@ export interface AppConfig {
     selectorRetryAttempts: number;
     /** Backoff entre reintentos (ms). */
     selectorRetryBackoffMs: number;
+    /**
+     * Espera (ms) cuando la cola de VINes está vacía antes de re-consultar
+     * el CRM. Por defecto 10 minutos. Configurable vía `ICM_QUEUE_EMPTY_MS`.
+     */
+    queueEmptyMs: number;
   };
   /** Mensajes de diálogo conocidos del navegador ICM. */
   dialogMessages: {
@@ -118,6 +123,8 @@ export const appConfig: AppConfig = {
     logWaitProgressMs: 10_000,
     selectorRetryAttempts: 3,
     selectorRetryBackoffMs: 2000,
+    queueEmptyMs:
+      Number(process.env.ICM_QUEUE_EMPTY_MS ?? 0) || 1000 * 60 * 10,
   },
   dialogMessages: {
     vinUnknown: [

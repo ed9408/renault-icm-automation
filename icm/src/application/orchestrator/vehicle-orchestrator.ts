@@ -154,23 +154,46 @@ export class VehicleOrchestrator {
   }
 
   private async processAllPending(): Promise<void> {
-    const { api, processVehicle, audit, logger } = this.deps;
+    const { logger } = this.deps;
 
-    let nextResp;
-    try {
-      nextResp = await this.fetchVinWithRetry('');
-    } catch (err) {
-      const classified = classifyError(err, { phase: 'fetchVin.initial' });
-      logger.error(formatError(classified.error));
-      throw classified.error;
-    }
+    // Loop externo: consulta inicial + espera + re-consulta cuando la cola está vacía.
+    // Solo termina por excepción (propagada al `runForever`).
+    while (true) {
+      let nextResp;
+      try {
+        nextResp = await this.fetchVinWithRetry('');
+      } catch (err) {
+        const classified = classifyError(err, { phase: 'fetchVin.poll' });
+        logger.error(formatError(classified.error));
+        throw classified.error;
+      }
 
-    if (nextResp.error || !nextResp.data) {
-      throw new NoVinAvailableError(
-        'CRM no devolvió VINes pendientes al iniciar',
-        { phase: 'fetchVin.initial' },
-      );
+      if (nextResp.error || !nextResp.data) {
+        // Cola vacía: NO cerramos el navegador. Esperamos `queueEmptyMs` y re-consultamos.
+        logger.info('Cola vacía: esperando antes de re-consultar el CRM', {
+          ms: appConfig.timeouts.queueEmptyMs,
+        });
+        await delay(appConfig.timeouts.queueEmptyMs);
+        continue;
+      }
+
+      // Hay VINes: re-autenticar reusando la misma página (sin lanzar Chromium nuevo)
+      // y procesar el batch reusando la lógica previa.
+      await this.reAuthenticate();
+      await this.processBatch(nextResp);
     }
+  }
+
+  /**
+   * Procesa un batch de VINes a partir de la primera respuesta del CRM.
+   * Termina cuando el CRM devuelve una respuesta vacía (cola agotada de esta tanda).
+   * En ese punto, el loop externo decidirá si esperar y re-consultar.
+   */
+  private async processBatch(initialResponse: {
+    data: NonNullable<Awaited<ReturnType<IApiService['getVin']>>['data']>;
+  }): Promise<void> {
+    const { api, processVehicle, logger } = this.deps;
+    let nextResp = initialResponse;
 
     while (true) {
       const ctx: VehicleContext = {
@@ -186,11 +209,30 @@ export class VehicleOrchestrator {
 
       const next = await api.getVin(ctx.id);
       if (next.error || !next.data) {
-        logger.info('No more VINs in queue', { lastId: ctx.id });
+        logger.info('No more VINs in current batch', { lastId: ctx.id });
         return;
       }
       nextResp = next;
     }
+  }
+
+  /**
+   * Re-autentica reusando la misma página de Puppeteer (no lanza Chromium nuevo).
+   * Se invoca tras detectar VINes nuevos después de una espera por cola vacía.
+   */
+  private async reAuthenticate(): Promise<void> {
+    const { browser, phase1, icmLogin, logger } = this.deps;
+    logger.info('Re-autenticando tras espera de cola vacía', {
+      waitMs: appConfig.timeouts.queueEmptyMs,
+    });
+    await browser.launch({
+      url: appConfig.browser.loginUrl,
+      fullscreen: appConfig.browser.fullscreen,
+      reuse: true,
+    });
+    await phase1.confirmAccess();
+    await phase1.selectIcmMod();
+    await icmLogin.login();
   }
 
   private async resolveContext(
