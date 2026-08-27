@@ -139,6 +139,7 @@ export class PuppeteerBrowserSession implements IBrowserSession {
         this.logger.info('Triggering scheduled password script');
         await delay(1500);
         await this.autoIt.enterPassword();
+        await this.autoIt.enter();
       })();
     }, appConfig.browser.passwordScriptDelayMs);
   }
