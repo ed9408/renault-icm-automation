@@ -10,6 +10,7 @@ import type { IApiService } from '../src/domain/ports/api-service.interface.ts';
 import type { IcmLoginUseCase } from '../src/application/usecases/icm-login.usecase.ts';
 import type { Phase1AuthUseCase } from '../src/application/usecases/phase1-auth.usecase.ts';
 import type { ProcessVehicleUseCase } from '../src/application/usecases/process-vehicle.usecase.ts';
+import type { AuditEntry } from '../src/domain/models/audit-entry.ts';
 import type { VehicleReport } from '../src/domain/models/vehicle.ts';
 
 // ---------- Mock factories ----------
@@ -215,5 +216,107 @@ describe('VehicleOrchestrator — processAllPending', () => {
 
     // Solo el launch inicial. Ninguna re-autenticación.
     expect((browser.launch as ReturnType<typeof mock>).mock.calls.length).toBe(1);
+  });
+});
+
+describe('VehicleOrchestrator — dry-run preview shape (paridad con wire)', () => {
+  it('runOnce con dryRun=true loguea set_vin_data (preview) con shape del wire', async () => {
+    const logger = new ConsoleLogger();
+    const infoSpy = spyOn(logger, 'info');
+
+    const report: VehicleReport = {
+      details: {
+        html: '<div>hi</div>',
+        b64: 'PGRpdj5oaTwvZGl2Pg==',
+        values: {
+          tipo_vh: 'sedan',
+          tipo_mot: '1.6',
+          tipo_caja: 'manual',
+          num_fab: 'X',
+          fecha_entrega: '2024-01-15',
+        },
+      },
+      historic: { html: '<span/>', b64: 'PHNhbj4=' },
+    };
+    const processVehicle = makeProcessVehicle();
+    (processVehicle.process as ReturnType<typeof mock>).mockResolvedValue(
+      report,
+    );
+
+    const { orchestrator } = build(
+      { logger, processVehicle },
+      { dryRun: true },
+    );
+
+    await orchestrator.runOnce('VF1ABC');
+
+    const previewCall = infoSpy.mock.calls.find(
+      (c) => c[0] === '→ set_vin_data (preview)',
+    );
+    expect(previewCall).toBeDefined();
+
+    const meta = previewCall![1] as { payload: Record<string, unknown> };
+    // Claves raíz del wire: cmd, id, vin, tipo, km, data.
+    expect(Object.keys(meta.payload).sort()).toEqual([
+      'cmd',
+      'data',
+      'id',
+      'km',
+      'tipo',
+      'vin',
+    ]);
+    expect(meta.payload.cmd).toBe('set_vin_data');
+
+    const data = meta.payload.data as Record<string, Record<string, unknown>>;
+    // Cada chunk mantiene sus claves exactas (NO b64Len / NO preview).
+    const details = data.details as Record<string, unknown>;
+    const historic = data.historic as Record<string, unknown>;
+    expect(Object.keys(details).sort()).toEqual(['b64', 'html', 'values']);
+    expect(Object.keys(historic).sort()).toEqual(['b64', 'html']);
+  });
+
+  it('runOnce con dryRun=true loguea report_auditory (preview) con shape { cmd, actions } (sin count)', async () => {
+    const logger = new ConsoleLogger();
+    const infoSpy = spyOn(logger, 'info');
+
+    const auditEntries: AuditEntry[] = [
+      {
+        id: '1',
+        vin: 'VF1',
+        action: 'login',
+        date: 1700000000000,
+        dateFull: '2024-01-15 10:00:00',
+      },
+    ];
+    const audit: IAuditLogger = {
+      log: () => true,
+      size: () => auditEntries.length,
+      snapshot: () => auditEntries,
+      flush: mock(async () => ({ error: false })),
+    };
+
+    const processVehicle = makeProcessVehicle();
+    (processVehicle.process as ReturnType<typeof mock>).mockResolvedValue({});
+
+    const { orchestrator } = build(
+      { logger, processVehicle, audit },
+      { dryRun: true },
+    );
+
+    await orchestrator.runOnce('VF1ABC');
+
+    const previewCall = infoSpy.mock.calls.find(
+      (c) => c[0] === '→ report_auditory (preview)',
+    );
+    expect(previewCall).toBeDefined();
+
+    const meta = previewCall![1] as {
+      payload: Record<string, unknown>;
+      count?: number;
+    };
+    // El payload NO contiene count; el conteo se imprime como metadato del log.
+    expect(Object.keys(meta.payload).sort()).toEqual(['actions', 'cmd']);
+    expect(meta.payload.cmd).toBe('report_auditory');
+    expect(meta.count).toBe(1);
   });
 });
