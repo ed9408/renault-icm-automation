@@ -1,68 +1,116 @@
+import { CMD } from './api-commands.ts';
 import { appConfig } from '../../core/config/app-config.ts';
 import type { AuditEntry } from '../../domain/models/audit-entry.ts';
-import type { VehicleReport } from '../../domain/models/vehicle.ts';
+import type {
+  HtmlChunk,
+  VehicleContext,
+  VehicleReport,
+} from '../../domain/models/vehicle.ts';
 
 /**
- * Helpers puros para generar resúmenes "seguros de loguear" de los
- * payloads que el runner envía al backend (CRM caribemotor).
+ * Helpers puros para generar payloads "seguros de loguear" con la MISMA
+ * forma que el runner envía al backend (CRM caribemotor).
  *
- * - HTML en base64 se reemplaza por `{ b64Len, preview }` (primeros N chars).
+ * - `b64` y `html` se truncan a `PREVIEW_B64_MAX`/`PREVIEW_HTML_MAX` chars
+ *   con un marker `…[truncated:N]` para no inundar la consola ni el log
+ *   con kilobytes de HTML por cada vehículo.
  * - El token se enmascara para no exponer credenciales en logs.
  * - El endpoint se reconstruye a partir de `appConfig.api.endpoint` para
  *   tener una única fuente de verdad.
+ *
+ * Importante: la forma del objeto devuelto por `formatSetVinDataPayload` y
+ * `formatReportAuditPayload` coincide 1:1 con la del body HTTP real — solo
+ * difiere en el truncamiento de strings. Esto permite usar el preview del
+ * modo dry-run para validar visualmente lo que se enviará.
  *
  * Usado por:
  *   - RenaultApiService (log permanente antes de cada http.request).
  *   - VehicleOrchestrator.dispatch() (preview en dry-run).
  */
 
-const PREVIEW_CHARS = 100;
+const PREVIEW_B64_MAX = 200;
+const PREVIEW_HTML_MAX = 200;
 
-function previewBase64(b64: string | undefined): {
-  b64Len: number;
-  preview: string;
-} {
-  if (!b64) return { b64Len: 0, preview: '' };
-  return {
-    b64Len: b64.length,
-    preview: b64.slice(0, PREVIEW_CHARS),
-  };
+/**
+ * Trunca `s` a `max` chars y añade un marker con el tamaño original.
+ * Si el string ya cabe, se devuelve tal cual.
+ */
+function truncateString(s: string, max: number): string {
+  if (!s) return s;
+  if (s.length <= max) return s;
+  return `${s.slice(0, max)}…[truncated:${s.length}]`;
 }
 
 /**
- * Resumen del VehicleReport: una entrada por sección con b64Len + preview,
- * preservando `values` (p.ej. AdminValues) que sí son útiles para diagnosticar.
+ * Devuelve un HtmlChunk con `b64` y `html` truncados pero mismo shape
+ * (mismas claves: `b64`, `html`, opcional `values`).
  */
-export function summarizeVehicleReport(report: VehicleReport): Record<
-  string,
-  unknown
-> {
-  const out: Record<string, unknown> = {};
-  for (const [key, chunk] of Object.entries(report)) {
-    if (!chunk) continue;
-    out[key] = {
-      b64Len: chunk.b64?.length ?? 0,
-      preview: previewBase64(chunk.b64).preview,
-      values: chunk.values,
-    };
+function previewHtmlChunk(chunk: HtmlChunk): Record<string, unknown> {
+  const out: Record<string, unknown> = {
+    b64: truncateString(chunk.b64, PREVIEW_B64_MAX),
+    html: truncateString(chunk.html, PREVIEW_HTML_MAX),
+  };
+  if (chunk.values !== undefined) {
+    out.values = chunk.values;
   }
   return out;
 }
 
 /**
- * Resumen del batch de auditoría. Cada entrada ya es pequeña
- * (id/vin/action/fechas) → se devuelve tal cual.
+ * Construye la rama `data` del payload `set_vin_data` con el MISMO shape
+ * que el report original: cada chunk aparece como `{ b64, html, values }`
+ * (sin `b64Len`/`preview`). Los campos no-HtmlChunk (p.ej. `adminData`)
+ * se preservan tal cual.
  */
-export function summarizeAuditActions(
+function previewVehicleReport(report: VehicleReport): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(report)) {
+    if (value === undefined || value === null) continue;
+    if (key === 'adminData') {
+      // AdminValues es data estructurada, no HtmlChunk: se preserva tal cual.
+      out.adminData = value;
+      continue;
+    }
+    out[key] = previewHtmlChunk(value as HtmlChunk);
+  }
+  return out;
+}
+
+/**
+ * Payload EXACTO de `set_vin_data` con `b64` y `html` truncados.
+ * Misma forma que el body que `RenaultApiService.sendData` envía al HTTP.
+ */
+export function formatSetVinDataPayload(
+  ctx: VehicleContext,
+  report: VehicleReport,
+): Record<string, unknown> {
+  return {
+    cmd: CMD.setVinData,
+    id: ctx.id,
+    vin: ctx.vin,
+    tipo: ctx.tipo,
+    km: ctx.km,
+    data: previewVehicleReport(report),
+  };
+}
+
+/**
+ * Payload EXACTO de `report_auditory` con las acciones tal cual.
+ * Misma forma que el body que `RenaultApiService.sendAudit` envía al HTTP.
+ */
+export function formatReportAuditPayload(
   actions: readonly AuditEntry[],
-): unknown[] {
-  return actions.map((a) => ({
-    id: a.id,
-    vin: a.vin,
-    action: a.action,
-    date: a.date,
-    dateFull: a.dateFull,
-  }));
+): Record<string, unknown> {
+  return {
+    cmd: CMD.reportAudit,
+    actions: actions.map((a) => ({
+      id: a.id,
+      vin: a.vin,
+      action: a.action,
+      date: a.date,
+      dateFull: a.dateFull,
+    })),
+  };
 }
 
 /**
@@ -72,7 +120,7 @@ export function summarizeAuditActions(
 export function buildEndpointUrl(): string {
   const host = appConfig.api.endpoint.host;
   const path = appConfig.api.endpoint.path;
-  return `https://${host}:443${path}`;
+  return `https://${host}${path}`;
 }
 
 /**

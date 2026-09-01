@@ -7,20 +7,15 @@ import type {
   VinResponse,
 } from '../../domain/ports/api-service.interface.ts';
 import type { IHttpClient } from '../../domain/ports/http-client.interface.ts';
+import type { AuditEntry } from '../../domain/models/audit-entry.ts';
 import type { VehicleContext, VehicleReport } from '../../domain/models/vehicle.ts';
 import {
   buildEndpointUrl,
+  formatReportAuditPayload,
+  formatSetVinDataPayload,
   maskedAuth,
-  summarizeAuditActions,
-  summarizeVehicleReport,
 } from './payload-preview.ts';
-
-const CMD = {
-  getVin: 'get_vin',
-  setVinData: 'set_vin_data',
-  unknownVin: 'unknow_vin',
-  reportAudit: 'report_auditory',
-} as const;
+import { CMD } from './api-commands.ts';
 
 function endpointHeaders(): Record<string, string> {
   return {
@@ -95,10 +90,7 @@ export class RenaultApiService implements IApiService {
       km: context.km,
       data: report,
     };
-    const summary = {
-      ...payload,
-      data: summarizeVehicleReport(report),
-    };
+    const summary = formatSetVinDataPayload(context, report);
 
     try {
       this.logOutgoing(CMD.setVinData, payload, summary);
@@ -159,13 +151,9 @@ export class RenaultApiService implements IApiService {
       cmd: CMD.reportAudit,
       actions,
     };
-    const summary = {
-      cmd: CMD.reportAudit,
-      actions: summarizeAuditActions(
-        actions as Parameters<typeof summarizeAuditActions>[0],
-      ),
-      count: actions.length,
-    };
+    const summary = formatReportAuditPayload(
+      actions as readonly AuditEntry[],
+    );
 
     try {
       this.logOutgoing(CMD.reportAudit, payload, summary);

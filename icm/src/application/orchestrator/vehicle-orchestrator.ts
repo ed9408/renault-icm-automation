@@ -21,9 +21,9 @@ import type { Phase1AuthUseCase } from '../usecases/phase1-auth.usecase.ts';
 import type { ProcessVehicleUseCase } from '../usecases/process-vehicle.usecase.ts';
 import {
   buildEndpointUrl,
+  formatReportAuditPayload,
+  formatSetVinDataPayload,
   maskedAuth,
-  summarizeAuditActions,
-  summarizeVehicleReport,
 } from '../../infrastructure/api/payload-preview.ts';
 
 export interface OrchestratorDeps {
@@ -266,25 +266,15 @@ export class VehicleOrchestrator {
       logger.info('→ set_vin_data (preview)', {
         url: buildEndpointUrl(),
         auth: maskedAuth(),
-        payload: {
-          cmd: 'set_vin_data',
-          id: ctx.id,
-          vin: ctx.vin,
-          tipo: ctx.tipo,
-          km: ctx.km,
-          data: summarizeVehicleReport(report),
-        },
+        payload: formatSetVinDataPayload(ctx, report),
       });
       const auditEntries = audit.snapshot();
       if (auditEntries.length > 0) {
         logger.info('→ report_auditory (preview)', {
           url: buildEndpointUrl(),
           auth: maskedAuth(),
-          payload: {
-            cmd: 'report_auditory',
-            count: auditEntries.length,
-            actions: summarizeAuditActions(auditEntries),
-          },
+          count: auditEntries.length,
+          payload: formatReportAuditPayload(auditEntries),
         });
       } else {
         logger.info('No audit entries to preview', { vin: ctx.vin });
