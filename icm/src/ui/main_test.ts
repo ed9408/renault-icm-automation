@@ -14,7 +14,7 @@ async function main(): Promise<void> {
     dryRun: true,
     failFast: true,
   });
-  const vin = process.env.ICM_TEST_VIN ?? '9FB5SR0E5PM426914';
+  const vin = process.env.ICM_TEST_VIN ?? '9FB4SR0E5PM565683';
   logger.info('╔══════════════════════════════════════════════════════════╗');
   logger.info('║  ICM Runner — Modo TEST (DRY-RUN)                       ║');
   logger.info(`║  VIN: ${vin.padEnd(48)}║`);

@@ -21,8 +21,19 @@ export class CaptureHistoricSection implements ISectionCapture {
     ctx: VehicleContext,
     nav: { gotoMenu(selector: string | undefined): Promise<void> },
   ): Promise<HtmlChunk | null> {
-    await nav.gotoMenu(frames.menuItems['Histórico']);
     this.audit.log(ctx.id, ctx.vin, 'Estoy esperando ingresar al historico');
+
+    // La cancelación de la alerta en Administrativo redirige automáticamente a Histórico.
+    // Si tras una breve espera el título no aparece, usamos gotoMenu como respaldo.
+    const titleReady = await this.extractor.waitForAny(
+      frames.frameBody,
+      [Selectors.historic.titleSelector],
+      5000,
+    );
+
+    if (!titleReady && frames.menuItems['Histórico']) {
+      await nav.gotoMenu(frames.menuItems['Histórico']);
+    }
 
     await this.extractor.waitAndExtract(
       frames.frameBody,

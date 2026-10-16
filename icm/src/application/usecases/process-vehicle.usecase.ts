@@ -23,10 +23,10 @@ import type { ISectionCapture } from './sections/section-capture.interface.ts';
  */
 export const SECTION_ORDER = [
   'details',
-  'historic',
   'agreements',
   'maintains',
   'admin',
+  'historic',
   'ots',
   'recmant',
 ] as const;
