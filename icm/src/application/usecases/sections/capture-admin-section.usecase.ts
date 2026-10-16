@@ -68,6 +68,32 @@ export class CaptureAdminSection implements ISectionCapture {
       'Ya ingrese al administrativo y capture su contenido',
     );
 
+    this.audit.log(
+      ctx.id,
+      ctx.vin,
+      'Haciendo clic en botón de acción administrativo',
+    );
+
+    const dialogHandled = await this.extractor.clickAndDismissDialog(
+      frames.frameBody,
+      Selectors.admin.actionButton,
+      10000,
+    );
+
+    if (dialogHandled) {
+      this.audit.log(
+        ctx.id,
+        ctx.vin,
+        'Alerta confirmada/cancelada correctamente',
+      );
+    } else {
+      this.audit.log(
+        ctx.id,
+        ctx.vin,
+        'No se pudo interactuar con el botón de acción administrativo o no apareció la alerta',
+      );
+    }
+
     return { html, b64: stringToBase64(html), values };
   }
 }

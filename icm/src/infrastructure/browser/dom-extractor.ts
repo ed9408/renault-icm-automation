@@ -202,6 +202,77 @@ export class PuppeteerDomExtractor implements IDomExtractor {
     return merged;
   }
 
+  async clickAndDismissDialog(
+    frame: Frame,
+    selector: string,
+    timeoutMs: number = 10000,
+  ): Promise<boolean> {
+    const puppeteerFrame = frame as PuppeteerFrame;
+    const page = puppeteerFrame.page();
+
+    try {
+      await puppeteerFrame.waitForSelector(selector, { timeout: timeoutMs });
+    } catch {
+      this.logger.warn(
+        `El selector "${selector}" no apareció dentro de ${timeoutMs}ms para hacer clic`,
+      );
+      return false;
+    }
+
+    const element = await puppeteerFrame.$(selector);
+    if (!element) {
+      this.logger.warn(`No se pudo obtener el elemento con selector "${selector}"`);
+      return false;
+    }
+
+    return new Promise<boolean>((resolve) => {
+      let resolved = false;
+
+      const finish = (result: boolean) => {
+        if (!resolved) {
+          resolved = true;
+          clearTimeout(timer);
+          page.off('dialog', dialogListener);
+          resolve(result);
+        }
+      };
+
+      const dialogListener = async (dialog: {
+        type(): string;
+        message(): string;
+        dismiss(): Promise<void>;
+      }) => {
+        try {
+          this.logger.info(
+            `Diálogo de navegador interceptado (${dialog.type()}): "${dialog.message()}". Cancelando...`,
+          );
+          await dialog.dismiss();
+        } catch {
+          // Si ya fue descartado por el manejador global del navegador, no es error
+        } finally {
+          finish(true);
+        }
+      };
+
+      page.on('dialog', dialogListener);
+
+      const timer = setTimeout(() => {
+        this.logger.warn(
+          `Timeout esperando la alerta del navegador tras hacer clic en "${selector}"`,
+        );
+        finish(true);
+      }, timeoutMs);
+
+      element.click().catch((err) => {
+        this.logger.error('Error al hacer clic en el botón', {
+          error: (err as Error).message,
+          selector,
+        });
+        finish(false);
+      });
+    });
+  }
+
   private async safeHtmlSnippet(frame: Frame): Promise<string | undefined> {
     try {
       const html = await this.extractHtml(frame);

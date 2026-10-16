@@ -56,4 +56,15 @@ export interface IDomExtractor {
 
   /** Helper: extrae AdminValues a partir del plan admin. */
   extractAdminValues(frame: Frame, plan: ExtractionPlan<AdminValues>): Promise<AdminValues>;
+
+  /**
+   * Hace clic en un elemento especificado y espera a que aparezca un diálogo
+   * del navegador (window.confirm/alert) para descartarlo (clic en Cancelar / dismiss).
+   * Devuelve true si se hizo clic y manejó la alerta, o false si el selector no estuvo disponible.
+   */
+  clickAndDismissDialog(
+    frame: Frame,
+    selector: string,
+    timeoutMs?: number,
+  ): Promise<boolean>;
 }

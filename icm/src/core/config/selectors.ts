@@ -80,6 +80,8 @@ export const Selectors = {
       fecha_entrega:
         '#dvContainer > table:nth-child(4) > tbody > tr:nth-child(2) > td:nth-child(8)',
     },
+    actionButton:
+      '#dvContainer > table:nth-child(2) > tbody > tr > td > table > tbody > tr > td:nth-child(2) > a',
   },
 
   /** Sección "OTS a realizar". */
