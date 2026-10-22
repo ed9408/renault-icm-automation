@@ -1,4 +1,5 @@
 import type { ILogger } from './logger.interface.ts';
+import { currentSection } from './section-scope.ts';
 
 /**
  * Códigos ANSI para colorear la salida.
@@ -49,8 +50,10 @@ export class ConsoleLogger implements ILogger {
     const lvl = String(LEVEL_COLOR[level] ? level : 'INFO');
     const lvlColored = paint(LEVEL_COLOR[lvl] ?? 'green', lvl.padEnd(5, ' '));
     const prefixColored = paint('cyan', this.prefix);
+    const section = currentSection();
+    const sectionTag = section ? ` ${paint('bold', `[sección: ${section}]`)}` : '';
     const ctx = context ? ` ${paint('gray', JSON.stringify(context))}` : '';
-    return `${paint('gray', ts)} ${prefixColored} ${lvlColored} ${message}${ctx}`;
+    return `${paint('gray', ts)} ${prefixColored} ${lvlColored}${sectionTag} ${message}${ctx}`;
   }
 
   debug(message: string, context?: Record<string, unknown>): void {

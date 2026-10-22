@@ -9,6 +9,7 @@ import {
 import { formatError } from '../../core/errors/error-formatter.ts';
 import { classifyError } from '../../core/errors/error-classifier.ts';
 import { delay } from '../../core/utils/delay.ts';
+import { runInSection } from '../../core/logger/section-scope.ts';
 import type { ILogger } from '../../core/logger/logger.interface.ts';
 import type { Frame, VehicleFrames } from '../../domain/models/frame-context.ts';
 import type { VehicleContext, VehicleReport } from '../../domain/models/vehicle.ts';
@@ -69,7 +70,9 @@ export class ProcessVehicleUseCase {
       if (!section) continue;
 
       try {
-        const chunk = await section.capture(frames, ctx, navAdapter);
+        const chunk = await runInSection(section.key, () =>
+          section.capture(frames, ctx, navAdapter),
+        );
         if (chunk) (report as Record<string, unknown>)[section.key] = chunk;
       } catch (err) {
         // Envolvemos cualquier error en SectionCaptureError para diagnóstico,
