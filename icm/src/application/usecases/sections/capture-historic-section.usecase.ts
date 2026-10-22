@@ -54,8 +54,16 @@ export class CaptureHistoricSection implements ISectionCapture {
       waitUntil: 'visible',
     });
 
-    if (moreBtn) await moreBtn.click();
-    await delay(1500);
+    if (moreBtn) {
+      await moreBtn.click();
+      await delay(1500);
+    } else {
+      this.audit.log(
+        ctx.id,
+        ctx.vin,
+        'Botón "Más" del histórico no existe; se captura el HTML de la sección sin expandir',
+      );
+    }
 
     const html = await this.extractor.extractHtml(frames.frameBody);
     this.audit.log(ctx.id, ctx.vin, 'Ya ingrese al historico y capture su contenido');

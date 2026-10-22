@@ -114,5 +114,41 @@ describe('HistoricSection & SECTION_ORDER', () => {
     // Como no apareció automáticamente, debe llamar a gotoMenu de respaldo
     expect(nav.gotoMenu).toHaveBeenCalledWith('#menuHistoric');
   }, 10000);
-});
 
+  it('CaptureHistoricSection captura el HTML sin hacer clic si el botón "Más" no existe', async () => {
+    const logs: string[] = [];
+    const audit: IAuditLogger = {
+      log: mock((_id, _vin, message) => {
+        if (message) logs.push(message);
+        return true;
+      }),
+      flush: mock(async () => ({ error: false })),
+      size: () => 0,
+      snapshot: () => [],
+    };
+
+    const extractor: IDomExtractor = {
+      waitForAny: mock(async () => Selectors.historic.titleSelector),
+      waitAndExtract: mock(async () => '<html><body>Historic Content</body></html>'),
+      extractHtml: mock(async () => '<html><body>Full Historic Content</body></html>'),
+      safeWaitForSelector: mock(async () => {}),
+      extractValues: mock(async () => ({} as never)),
+      extractAdminValues: mock(async () => ({} as never)),
+      clickAndDismissDialog: mock(async () => true),
+    };
+
+    const section = new CaptureHistoricSection(extractor, audit);
+    const frames: VehicleFrames = {
+      frameBody: { $: mock(async () => null) },
+      frameMenu: {},
+      menuItems: { Histórico: '#menuHistoric' },
+    };
+    const ctx: VehicleContext = { id: 'vh-1', vin: 'VF1TEST1234567890', tipo: 'V', km: 10000 };
+
+    const result = await section.capture(frames, ctx, { gotoMenu: mock(async () => {}) });
+
+    expect(extractor.extractHtml).toHaveBeenCalled();
+    expect(result?.html).toBe('<html><body>Full Historic Content</body></html>');
+    expect(logs.some((m) => m.includes('no existe'))).toBe(true);
+  }, 10000);
+});
