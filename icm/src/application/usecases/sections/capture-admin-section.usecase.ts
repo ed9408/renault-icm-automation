@@ -77,7 +77,7 @@ export class CaptureAdminSection implements ISectionCapture {
     const dialogHandled = await this.extractor.clickAndDismissDialog(
       frames.frameBody,
       Selectors.admin.actionButton,
-      10000,
+      appConfig.timeouts.selectorWaitMs,
     );
 
     if (dialogHandled) {

@@ -5,6 +5,7 @@ import type { IAuditLogger } from '../src/domain/ports/audit-logger.interface.ts
 import type { VehicleFrames } from '../src/domain/models/frame-context.ts';
 import type { VehicleContext } from '../src/domain/models/vehicle.ts';
 import { Selectors } from '../src/core/config/selectors.ts';
+import { appConfig } from '../src/core/config/app-config.ts';
 
 describe('CaptureAdminSection', () => {
   it('captura HTML, extrae valores y ejecuta clic con descarte de alerta', async () => {
@@ -66,7 +67,7 @@ describe('CaptureAdminSection', () => {
     expect(extractor.clickAndDismissDialog).toHaveBeenCalledWith(
       frames.frameBody,
       Selectors.admin.actionButton,
-      10000,
+      appConfig.timeouts.selectorWaitMs,
     );
     expect(result).not.toBeNull();
     expect(result?.html).toContain('Admin Content');

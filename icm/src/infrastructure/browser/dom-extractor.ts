@@ -205,7 +205,7 @@ export class PuppeteerDomExtractor implements IDomExtractor {
   async clickAndDismissDialog(
     frame: Frame,
     selector: string,
-    timeoutMs: number = 10000,
+    timeoutMs: number = 30000,
   ): Promise<boolean> {
     const puppeteerFrame = frame as PuppeteerFrame;
     const page = puppeteerFrame.page();
