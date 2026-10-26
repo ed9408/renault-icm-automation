@@ -176,21 +176,13 @@ export class ProcessVehicleUseCase {
         sel: string,
         opts: { timeout: number; waitUntil: 'load' },
       ): Promise<unknown>;
-      click(sel: string): Promise<unknown>;
       frames(): Promise<Array<{ name(): string }>>;
       url(): string;
     };
 
     try {
       await delay(4000);
-      // Paso previo a la búsqueda del VIN: abrir "Búsqueda vehículo".
-      this.logger.info('Clicking "Búsqueda vehículo"', { vin: ctx.vin });
-      await page.waitForSelector(Selectors.vehicleSearchLink, {
-        timeout: appConfig.timeouts.selectorWaitMs,
-        waitUntil: 'load',
-      });
-      await page.click(Selectors.vehicleSearchLink);
-      await delay(3000);
+      await this.clickVehicleSearch(page, ctx);
       await page.goto(gotoUrl, {
         timeout: appConfig.timeouts.navigationWaitMs,
         waitUntil: 'load',
@@ -261,6 +253,43 @@ export class ProcessVehicleUseCase {
 
     this.logger.info('Frames loaded');
     return { frameBody: frameBody as Frame, frameMenu: frameMenu as Frame, menuItems };
+  }
+
+  /**
+   * Paso previo a la búsqueda del VIN: el enlace "Búsqueda vehículo" vive
+   * en el frame del menú, así que se busca allí (no en la página principal).
+   */
+  private async clickVehicleSearch(
+    page: { frames(): Promise<Array<{ name(): string }>> },
+    ctx: VehicleContext,
+  ): Promise<void> {
+    const menu = (await page.frames()).find(
+      (f) => f.name() === Selectors.frames.menuName,
+    ) as
+      | {
+          waitForSelector(sel: string, opts: { timeout: number }): Promise<unknown>;
+          click(sel: string): Promise<unknown>;
+        }
+      | undefined;
+    if (!menu) {
+      this.logger.warn('Frame de menú no encontrado para "Búsqueda vehículo"', {
+        vin: ctx.vin,
+      });
+      return;
+    }
+    try {
+      this.logger.info('Clicking "Búsqueda vehículo"', { vin: ctx.vin });
+      await menu.waitForSelector(Selectors.vehicleSearchLink, {
+        timeout: appConfig.timeouts.selectorWaitMs,
+      });
+      await menu.click(Selectors.vehicleSearchLink);
+      await delay(3000);
+    } catch (err) {
+      this.logger.warn('No se pudo hacer clic en "Búsqueda vehículo"', {
+        vin: ctx.vin,
+        error: (err as Error).message,
+      });
+    }
   }
 
   /**
