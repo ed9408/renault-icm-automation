@@ -29,6 +29,9 @@ export const Selectors = {
     mainFrameset: 'html > frameset',
   },
 
+  /** Enlace "Búsqueda vehículo" que se debe pulsar antes de buscar el VIN. */
+  vehicleSearchLink: 'body > center > table > tbody > tr:nth-child(6) > td > a',
+
   /** "Connexion à ICM refusée" – el navegador se queda esperando. */
   connectionRefusedMarker: 'Connexion à ICM refusée',
 
@@ -110,7 +113,7 @@ export const MenuNames = [
   'Histórico',
   'Contratos y servicios',
   'Programa de mantenimiento',
-  'administrativa',
+  'Administrativo',
   'Recomendación de mantenimiento',
 ] as const;
 

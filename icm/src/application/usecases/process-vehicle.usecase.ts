@@ -176,12 +176,21 @@ export class ProcessVehicleUseCase {
         sel: string,
         opts: { timeout: number; waitUntil: 'load' },
       ): Promise<unknown>;
+      click(sel: string): Promise<unknown>;
       frames(): Promise<Array<{ name(): string }>>;
       url(): string;
     };
 
     try {
       await delay(4000);
+      // Paso previo a la búsqueda del VIN: abrir "Búsqueda vehículo".
+      this.logger.info('Clicking "Búsqueda vehículo"', { vin: ctx.vin });
+      await page.waitForSelector(Selectors.vehicleSearchLink, {
+        timeout: appConfig.timeouts.selectorWaitMs,
+        waitUntil: 'load',
+      });
+      await page.click(Selectors.vehicleSearchLink);
+      await delay(3000);
       await page.goto(gotoUrl, {
         timeout: appConfig.timeouts.navigationWaitMs,
         waitUntil: 'load',
