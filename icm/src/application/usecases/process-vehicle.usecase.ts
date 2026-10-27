@@ -263,24 +263,42 @@ export class ProcessVehicleUseCase {
     page: { frames(): Promise<Array<{ name(): string }>> },
     ctx: VehicleContext,
   ): Promise<void> {
-    const menu = (await page.frames()).find(
-      (f) => f.name() === Selectors.frames.menuName,
-    ) as
-      | {
-          waitForSelector(sel: string, opts: { timeout: number }): Promise<unknown>;
-          click(sel: string): Promise<unknown>;
-        }
-      | undefined;
-    if (!menu) {
-      this.logger.warn('Frame de menú no encontrado para "Búsqueda vehículo"', {
-        vin: ctx.vin,
-      });
-      return;
-    }
+    type MenuFrame = {
+      waitForSelector(sel: string, opts: { timeout: number }): Promise<unknown>;
+      click(sel: string): Promise<unknown>;
+    };
     try {
       this.logger.info('Clicking "Búsqueda vehículo"', { vin: ctx.vin });
-      await menu.waitForSelector(Selectors.vehicleSearchLink, {
-        timeout: appConfig.timeouts.selectorWaitMs,
+      // La página puede tardar en cargar: se reintenta (frame + selector).
+      const menu = await this.withSelectorRetry<MenuFrame>({
+        label: 'identify.vehicleSearch',
+        selector: Selectors.vehicleSearchLink,
+        timeoutMs: appConfig.timeouts.vehicleSearchWaitMs,
+        maxAttempts: appConfig.timeouts.vehicleSearchAttempts,
+        backoffMs: appConfig.timeouts.selectorRetryBackoffMs,
+        vin: ctx.vin,
+        wait: async () => {
+          const frame = (await page.frames()).find(
+            (f) => f.name() === Selectors.frames.menuName,
+          ) as MenuFrame | undefined;
+          if (!frame) throw new Error('Frame de menú no encontrado');
+          await frame.waitForSelector(Selectors.vehicleSearchLink, {
+            timeout: appConfig.timeouts.vehicleSearchWaitMs,
+          });
+          return frame;
+        },
+        buildError: (lastErr, attempts) =>
+          new FrameNotFoundError(
+            `No apareció "Búsqueda vehículo" en el menú tras ${attempts} intentos`,
+            {
+              phase: 'identify.vehicleSearch',
+              vin: ctx.vin,
+              attempt: attempts,
+              selector: Selectors.vehicleSearchLink,
+              extra: { originalMessage: (lastErr as Error).message },
+            },
+            { cause: lastErr as Error },
+          ),
       });
       await menu.click(Selectors.vehicleSearchLink);
       await delay(3000);

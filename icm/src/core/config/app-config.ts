@@ -52,6 +52,10 @@ export interface AppConfig {
     sectionWaitMs: number;
     /** Cap por defecto para `waitForSelector` en frames y secciones del menú ICM. */
     selectorWaitMs: number;
+    /** Cap por intento para detectar "Búsqueda vehículo" en el frame del menú. */
+    vehicleSearchWaitMs: number;
+    /** Intentos para detectar "Búsqueda vehículo" en el frame del menú. */
+    vehicleSearchAttempts: number;
     /** Cap para `waitForSelector` en login (SSO de Renault es lento). */
     loginSelectorWaitMs: number;
     /** Cap para `page.goto` / `page.waitForNavigation`. */
@@ -118,6 +122,8 @@ export const appConfig: AppConfig = {
     postIdentifyWaitMs: 4000,
     sectionWaitMs: 3000,
     selectorWaitMs: 30_000,
+    vehicleSearchWaitMs: 60_000,
+    vehicleSearchAttempts: 3,
     loginSelectorWaitMs: 60_000,
     navigationWaitMs: 30_000,
     logWaitProgressMs: 10_000,
