@@ -182,7 +182,6 @@ export class ProcessVehicleUseCase {
 
     try {
       await delay(4000);
-      await this.clickVehicleSearch(page, ctx);
       await page.goto(gotoUrl, {
         timeout: appConfig.timeouts.navigationWaitMs,
         waitUntil: 'load',
@@ -229,6 +228,9 @@ export class ProcessVehicleUseCase {
     });
     this.logger.info('Main frameset loaded');
 
+    // Tras navegar a la URL de buildVehicleUrl, abrir "Búsqueda vehículo".
+    await this.clickVehicleSearch(page, ctx);
+
     const all = await page.frames();
     const frameBody = all.find((f) => f.name() === Selectors.frames.bodyName);
     const frameMenu = all.find((f) => f.name() === Selectors.frames.menuName);
@@ -256,7 +258,7 @@ export class ProcessVehicleUseCase {
   }
 
   /**
-   * Paso previo a la búsqueda del VIN: el enlace "Búsqueda vehículo" vive
+   * Se ejecuta tras navegar a la URL del VIN: el enlace "Búsqueda vehículo" vive
    * en el frame del menú, así que se busca allí (no en la página principal).
    */
   private async clickVehicleSearch(
