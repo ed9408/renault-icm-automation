@@ -269,6 +269,12 @@ export class ProcessVehicleUseCase {
       waitForSelector(sel: string, opts: { timeout: number }): Promise<unknown>;
       click(sel: string): Promise<unknown>;
     };
+    if (await this.isVehicleLoaded(page)) {
+      this.logger.info('Vehículo ya cargado, se omite "Búsqueda vehículo"', {
+        vin: ctx.vin,
+      });
+      return;
+    }
     try {
       this.logger.info('Clicking "Búsqueda vehículo"', { vin: ctx.vin });
       // La página puede tardar en cargar: se reintenta (frame + selector).
@@ -309,6 +315,34 @@ export class ProcessVehicleUseCase {
         vin: ctx.vin,
         error: (err as Error).message,
       });
+    }
+  }
+
+  /**
+   * Verifica si ya está la vista del vehículo: `#DivOts` en el frame body y el
+   * enlace de la fila 10 en el frame del menú. Cualquier fallo se trata como
+   * "no cargado" para que el flujo navegue a "Búsqueda vehículo".
+   */
+  private async isVehicleLoaded(page: {
+    frames(): Promise<Array<{ name(): string }>>;
+  }): Promise<boolean> {
+    type QueryFrame = { $(sel: string): Promise<unknown> };
+    try {
+      const all = await page.frames();
+      const body = all.find((f) => f.name() === Selectors.frames.bodyName) as
+        | QueryFrame
+        | undefined;
+      const menu = all.find((f) => f.name() === Selectors.frames.menuName) as
+        | QueryFrame
+        | undefined;
+      if (!body || !menu) return false;
+      const [bodyEl, menuEl] = await Promise.all([
+        body.$(Selectors.vehicleLoaded.bodyElement),
+        menu.$(Selectors.vehicleLoaded.menuElement),
+      ]);
+      return Boolean(bodyEl && menuEl);
+    } catch {
+      return false;
     }
   }
 

@@ -32,6 +32,16 @@ export const Selectors = {
   /** Enlace "Búsqueda vehículo" que se debe pulsar antes de buscar el VIN. */
   vehicleSearchLink: 'body > center > table > tbody > tr:nth-child(6) > td > a',
 
+  /**
+   * Elementos que indican que el vehículo ya está cargado: `#DivOts` en el frame
+   * del body y este enlace en el frame del menú. Si ambos existen no hace falta
+   * navegar a "Búsqueda vehículo".
+   */
+  vehicleLoaded: {
+    bodyElement: '#DivOts',
+    menuElement: 'body > center > table > tbody > tr:nth-child(10) > td > a',
+  },
+
   /** "Connexion à ICM refusée" – el navegador se queda esperando. */
   connectionRefusedMarker: 'Connexion à ICM refusée',
 
