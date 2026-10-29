@@ -21,7 +21,7 @@ export class CaptureAdminSection implements ISectionCapture {
     ctx: VehicleContext,
     nav: { gotoMenu(selector: string | undefined): Promise<void> },
   ): Promise<HtmlChunk | null> {
-    await nav.gotoMenu(frames.menuItems['administrativa']);
+    await nav.gotoMenu(frames.menuItems['Administrativo']);
     this.audit.log(ctx.id, ctx.vin, 'Estoy esperando ingresar al administrativo');
 
     const matched = await this.extractor.waitForAny(
@@ -30,7 +30,7 @@ export class CaptureAdminSection implements ISectionCapture {
         Selectors.admin.primaryTitleSelector,
         ...Selectors.admin.alternates,
       ],
-      10000,
+      30000,
     );
 
     if (!matched) {
