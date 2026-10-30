@@ -319,7 +319,7 @@ export class ProcessVehicleUseCase {
   }
 
   /**
-   * Verifica si ya está la vista del vehículo: `#DivOts` en el frame body y el
+   * Verifica si ya está la vista del vehículo: `#DivOts` (o `#DivDet`) en el frame body y el
    * enlace de la fila 10 en el frame del menú. Cualquier fallo se trata como
    * "no cargado" para que el flujo navegue a "Búsqueda vehículo".
    */
@@ -336,11 +336,13 @@ export class ProcessVehicleUseCase {
         | QueryFrame
         | undefined;
       if (!body || !menu) return false;
-      const [bodyEl, menuEl] = await Promise.all([
-        body.$(Selectors.vehicleLoaded.bodyElement),
-        menu.$(Selectors.vehicleLoaded.menuElement),
-      ]);
-      return Boolean(bodyEl && menuEl);
+      const menuEl = await menu.$(Selectors.vehicleLoaded.menuElement);
+      if (!menuEl) return false;
+      // Primero #DivOts; si no existe, se valida #DivDet.
+      for (const selector of Selectors.vehicleLoaded.bodyElements) {
+        if (await body.$(selector)) return true;
+      }
+      return false;
     } catch {
       return false;
     }

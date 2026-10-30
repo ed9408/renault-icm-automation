@@ -38,7 +38,8 @@ export const Selectors = {
    * navegar a "Búsqueda vehículo".
    */
   vehicleLoaded: {
-    bodyElement: '#DivOts',
+    /** Se prueban en orden: el primero que exista indica vehículo cargado. */
+    bodyElements: ['#DivOts', '#DivDet'],
     menuElement: 'body > center > table > tbody > tr:nth-child(10) > td > a',
   },
 
